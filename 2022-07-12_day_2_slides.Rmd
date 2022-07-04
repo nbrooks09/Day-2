@@ -1,0 +1,656 @@
+---
+title: "Intro to Data Wrangling, Exploration, and Analysis with R"
+subtitle: "Summer 2022 Workshop: Day 2"
+author: "Nina Brooks<br> Assistant Professor, UConn School of Public Policy"
+date: 'July 12, 2022'
+output: 
+  xaringan::moon_reader:
+    nature:
+      ratio: '16:9'
+      countIncrementalSlides: false
+      highlightStyle: github
+      highlightLines: true
+params:
+  name1: "Nina" 
+  name2: "Nina"
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+knitr::opts_chunk$set(fig.retina = 3, warning = FALSE, message = FALSE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+# load packages
+library(readxl) # this package allows you to read .xlsx files into R
+library(haven) # this package allows you to read & write stata .dta files
+library(tabulator) # this is a package that is useful for making cross-tabs
+library(janitor) # contains useful commands for data cleaning
+library(tidycensus) # an R package that allows users to interface with a select
+                    # number of the US Census Bureau’s data APIs and return 
+                    # tidyverse-ready data frame
+library(palmerpenguins)
+library(gapminder) # contains an excerpt of data from Gapminder (https://www.gapminder.org/data/)
+library(rvest) # a tidyverse package for webscraping
+library(glue) # tidyverse-adjacent package makes working with interpreted string literals simpler
+library(lubridate) # tidyverse package for working with dates
+library(infer)
+library(broom)
+library(modelsummary)
+library(gtsummary) # for summary tables
+library(tidyverse) # this loads the 8 core packages of the tidyverse
+library(tidylog) # this is a package that adds extra explanation of tidyverse commands
+
+```
+
+# Welcome to Day 2
+
+## Agenda
+1. Questions from yesterday's topics
+
+--
+
+2. Descriptive statistics & nice looking tables
+
+--
+
+3. Linear Regression & exporting nice looking tables
+
+--
+
+4. Data Visualization 
+---
+
+class: middle, center, inverse
+# Questions?
+
+---
+
+# Descriptive statistics
+
+We already saw how you use `dplyr` commands like `mutate()` and `summarise()` to compute descriptive statistics, such as means, standard deviations, etc:
+
+--
+
+```{r load WDI, echo=FALSE}
+wdi <- read_excel("./data/Data_Extract_From_World_Development_Indicators.xlsx")
+
+wdi <- read_excel("./data/Data_Extract_From_World_Development_Indicators.xlsx",
+                       n_max = max(which(wdi$`Country Name` == "Zimbabwe"))) %>%
+    clean_names() %>%
+    select(-c(country_code, series_code)) %>%
+    rename(
+        country = country_name,
+        series = series_name
+    ) %>%
+    mutate(across(starts_with("x"), as.numeric)) 
+
+wdi_long <- wdi %>% # this time we'll save it as a new object
+    pivot_longer(
+        -c(country, series), 
+        names_to = "year",
+        names_pattern = "(\\d+)",
+        names_transform = list(year = as.integer),
+        values_to = "value") 
+
+wdi_long <- wdi_long %>%
+    mutate(
+        series_short = case_when( # use case_when() for conditional operations
+            str_detect(series, "electricity") ~ "electricity",
+            str_detect(series, "(?=.*Education)(?=.*female)") ~ "edu_female",
+            str_detect(series, "(?=.*Education)(?=.*male)") ~ "edu_male",
+            str_detect(series, "GDP per capita") ~ "gdppc",
+            str_detect(series, "malaria") ~ "malaria",
+            str_detect(series, "Internet") ~ "internet",
+            str_detect(series,  "(?=.*Labor)(?=.*female)") ~ "lfp_female",
+            str_detect(series, "(?=.*Labor)(?=.*male)") ~ "lfp_male",
+            str_detect(series, "Military") ~ "military",
+            str_detect(series, "Poverty") ~ "poverty_gap",
+            str_detect(series, "Prevalence") ~ "underourished"
+        )
+    ) 
+
+wdi_df <- wdi_long %>%
+    select(-series) %>%
+    pivot_wider(
+        names_from = "series_short",
+        values_from = "value"
+        )
+
+
+```
+
+.pull-left[
+```{r code-summary, eval=FALSE}
+wdi_df %>%
+    group_by(country) %>%
+    summarise_at(
+        vars(gdppc, electricity, malaria), 
+        mean, na.rm = TRUE) %>%
+    head(n = 5)
+```
+]
+
+.pull-right[
+```{r output-summary, ref.label="code-summary", echo=FALSE}
+
+```
+]
+
+--
+
+But often you will want to prepare nice looking, well-formatted tables to include in reports and publications. And there are *many* packages in R that can help with this. I like [`gtsummmary`](https://www.danieldsjoberg.com/gtsummary/) because it is relatively easy to make nice looking tables, but also flexible and extensively customizable for different needs. `gtsummmary` is also `tidyverse` adjacent package, so it fits nicely with the family of packages we're already working with.
+
+---
+layout:true
+# Summary tables with `gtsummary`<img src="./figs/gtsummary.png" alt="tidyr" width="90"/>
+---
+
+`gtsummary` contains two primary commands: `tbl_summary()`, which is for summary or descriptive tables, and `tbl_regression()`, which is for tables of regression results (more on this later). Make sure to install it (only before the first use) and load it along with all your other packages.
+
+```{r install-gtsummary}
+# install.packages("gtsummary") # uncomment to install
+library(gtsummary)
+
+```
+
+To demonstrate the functionality, let's work with a smaller version of this WDI data: a sub-sample of just South Asian countries with fewer variables.
+
+```{r filter-SA}
+
+sa <- wdi_df %>%
+     mutate(
+        # create a logical variable to filter with
+        south_asia = country %in% c("Afghanistan", "Bangladesh","Bhutan",
+                                         "India", "Maldives", "Nepal", 
+                                         "Pakistan", "Sri Lanka")
+    ) %>%
+    filter(south_asia) %>%
+    select(country, year, electricity, malaria, gdppc)
+
+```
+
+---
+
+The default output from `tbl_summary()` is meant to be publication ready. The `tbl_summary()` function takes a data frame as the only input, and returns descriptive statistics for each column in the data frame. This command has some useful features:
+
+- Variable types are automatically detected so that appropriate descriptive statistics are calculated.
+- Label attributes from the data set are automatically printed.
+- Missing values are listed as “Unknown” in the table.
+- Variable levels are indented and footnotes are added.
+
+---
+
+
+```{r tbl_summary}
+sa %>%
+    tbl_summary(by = country)
+
+```
+
+???
+This is what an "off-the-shelf" table looks like. I'm using the `by = country` option to get summary statistics by country. Ask what the table is showing first, then explain. 
+
+By default, this has given us the median value of each variable for each country (remember we have 12 years) and put the interquartile range in parentheses. It also gave us this for the year, which we don't really want.
+---
+
+Remember factor variables from yesterday? Factors are used for storing categorical variables and have a lot of useful properties for plotting as we'll see later. Factors are comprised of two components: the actual values of the data and the possible levels within the factor. 
+
+Let's see what happens if we convert `year` from a numeric variable to a factor:
+.pull-left[
+```{r wdi-factor, eval=FALSE}
+sa %>%
+    mutate(
+        year = factor(year)
+    ) %>%
+    tbl_summary(by = country)
+
+```
+]
+
+.pull-right[
+```{r output-factor, ref.label="wdi-factor", echo=FALSE}
+
+```
+]
+
+???
+This is a pretty ugly table now - but you can see that year is being treated differently - instead of giving us a median & IQR, it's reporting the number of observations per country & year with the % in parentheses. So for example, in 2010 we have 1 observation for afghanistan, which is 8.3% of all the observations for afghanistan 
+---
+
+Now, let's see how this can be further customized. We'll get rid of the `year` variable, which we don't need in the table and change which statistics we want to show:
+
+.pull-left[
+```{r code-table1, eval=FALSE}
+sa %>%
+    select(-c(year)) %>%
+    tbl_summary(
+        by = country,
+        statistic = all_continuous() ~ "{mean} ({sd})"
+        )
+```
+]
+
+.pull-right[
+```{r output-table1, ref.label="code-table1", echo=FALSE}
+
+```
+]
+
+???
+Explain the all_continuous. Looking better, but now let's add some styling.
+---
+
+.pull-left[
+```{r code-table2, eval=FALSE}
+sa %>%
+    select(-c(year)) %>%
+    tbl_summary(
+        by = country,
+        statistic = all_continuous() ~ "{mean} ({sd})",
+        digits = all_continuous() ~ 2,
+        label = list(
+            electricity ~ "Electricity access (% of population)",
+            malaria ~ "Malaria prevalence (% of population",
+            gdppc ~ "GDP per capita"),
+        missing_text = "Missing"
+        )
+```
+]
+
+.pull-right[
+```{r output-table2, ref.label="code-table2", echo=FALSE}
+
+```
+]
+
+???
+Explain the digits is rounding. We can also get rid of the missing row and add an overall column, which is handy
+---
+
+```{r code-table3, eval=FALSE}
+sa %>%
+    select(-c(year)) %>%
+    tbl_summary(
+        by = country,
+        statistic = all_continuous() ~ "{mean} ({sd})",
+        digits = all_continuous() ~ 2,
+        label = list(
+            electricity ~ "Electricity access (% of population)",
+            malaria ~ "Malaria prevalence (% of population",
+            gdppc ~ "GDP per capita (constant 2015 US$)"),
+        missing = "no"
+        ) %>%
+    # you can pipe the different commands
+    add_overall() %>%
+    modify_caption("**Table 1. Development Characteristics for South Asia (2010 - 2021)**") %>%
+    bold_labels()
+```
+
+
+---
+
+
+```{r output-table3, ref.label="code-table3", echo=FALSE}
+
+```
+
+---
+
+Let's look at another example, using a sample dataset that comes with the `gtsummary` package when you load it. This set contains data from 200 patients who received one of two types of chemotherapy (Drug A or Drug B). The outcomes are tumor response and death.
+
+```{r trial}
+head(trial)
+
+```
+
+---
+
+Often with data like this, you want to compare characteristics across two groups (Drug A vs. Drug B) and calculate whether the differences are statistically significant. You can easily do this with `tbl_summary()`. 
+
+```{r trial-tbl-code}
+tbl <- trial %>%
+    select(trt, age, stage, marker) %>%
+    tbl_summary(
+        by = trt,
+        missing = "no",
+        digits = age ~ 1,
+        statistic  = all_continuous() ~ "{mean} ({sd})") %>%
+    add_overall() %>% # adds an overall column
+    add_n() %>% # adds the overall sample size
+    add_difference() %>% # calculates diff b/w Drug A & B; p-value
+    # add_difference also adds the CI by default, but i chose to hide that column
+    modify_column_hide(ci)
+
+```
+???
+Explain overall, n, diff; highlight the nice labels
+
+---
+
+```{r trial-tbl-output, echo=FALSE}
+tbl
+```
+
+---
+
+`gtsummary` tables can be saved as an images, RTFs, .tex files, PDFs, or Word files. Depending on what type of file you want to export your table as, you may need to use a companion package.
+
+```{r save-gttable, eval=FALSE}
+
+tbl %>%
+  as_gt() %>% # need to convert to a "gt" object first
+  # use extensions .html .tex .ltx .rtf
+  gt::gtsave(filename = "./output/trial_characteristics.tex") 
+
+
+tbl %>%
+  as_flex_table() %>% # need to convert to a "flex_table" object first
+  flextable::save_as_docx(path = "./output/trial_characteristics.docx")
+
+
+```
+
+---
+
+There are many more options to customize your tables. Remember to read the detailed "vignette" on [`gtsummary`](https://www.danieldsjoberg.com/gtsummary/index.html) and use the help option within R: `?tbl_summary()` or `help(tbl_summary)`. 
+
+And, always remember to Google your specific question and look for answers on [stack overflow](https://stackoverflow.com/). Odds are, someone else has had the same question and you'll find a solution!
+
+---
+layout: false
+class: middle, center, inverse
+# Questions?
+---
+
+# Statistical Inference
+
+All of the statistical inference tasks you've learned about in classes and maybe how to perform in other programs (e.g. Stata) are possible in R. I'll demonstrate two common tasks:
+
+--
+
+1. t-tests
+2. Linear regression
+
+--
+
+In addition to many built in commands that come in every installation of R, we'll use a few additional packages that make it easy to do common things (e.g., cluster standard errors, absorb fixed effects), as well as create publication ready tables and figures from your results.
+
+```{r reg-packages, eval = F}
+install.packages("fixest") # fixed effects regression, TSLS, & SE
+install.packages("broom") # for creating "tidy" regression tables
+install.packages("AER") # contains all the datasets from Stock & Watson
+install.packages("sandwich") # for calculating robust SE
+install.packages("clubSandwich") # for calculating cluster-robust SE
+
+```
+
+For anyone that learned econometrics here at SPP with the Stock and Watson textbook, there is an [online R companion](https://www.econometrics-with-r.org/) to that book that demonstrates how to do everything in R. 
+
+???
+This topic will not focus on any of the theory behind these tasks - that's for your econometrics courses - just demonstrate how to do them in R. 
+---
+
+# Penguin Data
+
+.pull-left[
+To demonstrate some of these tasks, we'll use a datas et on penguins, collected at the Palmer station in Antarctica. It's designed for demonstrating patterns in data (and is more fun than student-teacher ratios `r emo::ji("wink")`).
+
+You can access this data by installing, loading the package, & calling the data:
+
+```{r penguins, eval = FALSE}
+install.pacakges("palmerpenguins")
+library(palmerpenguins)
+penguins # loads the data
+
+```
+
+]
+
+.pull-right[
+Palmer Penguins (art by [Allison Horst](https://allisonhorst.github.io/))
+![Penguins](figs/penguins.png)
+]
+---
+# Penguin Data
+
+Let's take a look at what's in this data:
+
+```{r glimpse-penguins, echo =FALSE}
+
+glimpse(penguins)
+
+```
+---
+
+layout: true
+# t-tests
+---
+
+Base R option includes a command to run t-test: `t.test()`. Let's go to RStudio and take a quick look at the help page for `t.test()` first.
+
+--
+
+Let's do a simple t-test to test a hypothesis about the mean flipper length of penguins:
+$$H_0: \mu = 185 \\
+H_1: \mu \neq 185$$
+
+--
+
+.pull-left[
+```{r ttest-code, eval = FALSE}
+t.test(
+    flipper_length_mm ~ 1, 
+    mu = 185, alternative = "two.sided", 
+    data = penguins #<<
+)
+
+```
+]
+
+--
+
+.pull-right[
+```{r ttest-results, ref.label="ttest-code", echo=FALSE}
+```
+]
+
+???
+We haven't used a lot a non-tidyverse commands/commands without pipes - so i want to draw your attention to attention to the data argument in this command. if you're not working with a pipe (where you specify the dataframe first and then chain commands), then you MUST tell R what data frame you're working with
+---
+
+Is there a tidyverse t-test, you ask? `r emo::ji("thinking")` 
+
+--
+Why yes, of course there is `r emo::ji("raised_hands")` 
+
+It comes in the [`infer`](https://infer.netlify.app/) package. And, the syntax is very similar to the base R command, but the output is a little nicer to look at. The output is conveniently stored in a tidy tibble, which you can export as a table or make a plot with. Let's take a quick look at the documentation in R.
+
+--
+```{r ttest-code-tidy, eval = FALSE}
+penguins %>% #<<
+    t_test(
+        response = flipper_length_mm, #<<
+        mu = 185,  alternative = "two.sided"
+        )
+
+
+```
+
+--
+
+
+```{r ttest-results-tidy, ref.label="ttest-code-tidy", echo=FALSE}
+```
+
+???
+Here I highlighted where we call the data when using a pipe, just to emphasize the difference with the base R option. I also highlight the line where we specify the variable we're testing a hypothesis about. It;s called a response variable.
+---
+
+Let's do a two-group t-test, where we are testing whether the flipper length of male and female penguins is the same.
+
+$$H_0: \mu_M = \mu_F \\
+H_1: \mu_M \neq  \mu_F$$
+
+
+--
+
+```{r ttest-code-tidy2, eval = FALSE}
+penguins %>% 
+    t_test(
+        formula = flipper_length_mm ~ sex, #<<
+        alternative = "two.sided"
+    )
+
+
+```
+
+--
+
+```{r ttest-results-tidy2, ref.label="ttest-code-tidy2", echo=FALSE}
+```
+???
+Now we're specifying a formula, that says test the difference of the first variable according to groups of the 2nd variable. 
+
+---
+layout: false
+class: middle, center, inverse
+# Questions?
+---
+
+layout:true
+# Regression
+---
+
+R comes with built in commands to run regressions. The primary command is `lm()` (linear model). Let's look at the help file.
+
+--
+
+Let's start with a simple OLS to look at the relationship between body mass and flipper length of penguins.
+
+```{r lm}
+lm(body_mass_g ~ flipper_length_mm, data = penguins)
+
+```
+
+??? ask someone to explain the output/interpret the coefficient
+---
+
+If you want to see a bit more information (standard errors maybe?), you need to call `summary()` on an `lm` object.
+
+Notice that I am storing the regression in a new object I called `reg`:
+
+```{r lm-summary, eval = FALSE}
+reg <- lm( #<<
+    body_mass_g ~ flipper_length_mm, 
+    data = penguins) 
+summary(reg)
+
+```
+
+---
+
+
+```{r lm-summary-results, ref.label="lm-summary", echo=FALSE}
+```
+???
+ask them to explain the output
+
+---
+
+The [`broom`](https://broom.tidymodels.org/) package provides a few tools to conveniently summarize regression models in R. As always, make sure you install (just once) and load the package prior to use. The `broom::tidy()` command produces a nice, tidy table of your regression results.
+
+-- 
+
+```{r broom}
+tidy(reg)
+```
+
+---
+
+Let's add a few more variables to this model and make it a multivariate regression.
+
+--
+
+```{r multireg}
+mvreg <- lm( 
+    body_mass_g ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex, #<<
+    data = penguins) 
+
+```
+
+
+
+The only difference is that you add each additional variable with a **+**.
+
+---
+
+
+```{r multireg-results}
+tidy(mvreg, conf.int = TRUE)
+
+```
+
+This time, I included an option to add the confidence interval to the output. The default is a 95% confidence interval, but you can change the level by specifying the option `conf.level = 0.90` (which would give you a 90% CI).
+
+???
+interpret the coefficient on sex. sex is a factor variable -- so R knows to treat it like a binary variable in the regression.
+---
+layout: false
+# Regression tables with `gtsummary`
+
+We already saw how to use `gtsummary::tbl_summary()` to produce publication ready tables of summary statistics. We can also use it to produce regression tables with the command `tbl_regression()`.
+
+.pull-left[
+```{r tbl-reg}
+tbl_regression(reg)
+
+```
+]
+
+.pull-right[
+```{r tbl-mvreg}
+tbl_regression(mvreg)
+
+```
+]
+
+--
+
+That's a pretty good start - and you can do a lot better with some customization, but I personally prefer [`modelsummary`](https://vincentarelbundock.github.io/modelsummary/index.html) for regression tables.
+
+???
+You can combine these easily too into a single table.
+---
+
+layout: true
+#  Regression tables with `modelsummary` <img src="./figs/modelsummary.png" alt="ms" width="70"/>
+---
+
+```{r modelsummary, eval=FALSE}
+
+modelsummary(
+    list(
+        "Simple OLS" = reg,
+        "Multivariate Model" = mvreg
+    ),
+    gof_map = c("nobs", "r.squared"),
+    stars = T
+)
+
+```
+???
+Explain the syntax (gof == goodness-of-fit)
+---
+
+
+```{r modelsummary-results, ref.label="modelsummary", echo=FALSE}
+```
