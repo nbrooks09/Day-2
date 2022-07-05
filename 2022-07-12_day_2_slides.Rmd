@@ -549,7 +549,7 @@ If you want to see a bit more information (standard errors maybe?), you need to 
 
 Notice that I am storing the regression in a new object I called `reg`:
 
-```{r lm-summary, eval = FALSE}
+```{r lm-summary}
 reg <- lm( #<<
     body_mass_g ~ flipper_length_mm, 
     data = penguins) 
@@ -689,10 +689,28 @@ Explain all the syntax.
 
 ---
 
-```{r modelsummary-results2, ref.label="modelsummary2", echo=FALSE}
-```
-???
+```{r modelsummary-results2, echo=FALSE}
 
+modelsummary(
+    list(
+        "Simple OLS" = reg,
+        "Multivariate Model" = mvreg
+    ),
+    fmt = 2,
+    coef_map= c(
+        "flipper_length_mm" = "Flipper Length (mm)", 
+        "bill_length_mm" = "Bill Length (mm)",
+        "bill_depth_mm" = "Bill Depth (mm)",
+        "sexmale" = "Male", 
+        "(Intercept)" = "Constant"),
+    gof_map = c("nobs", "r.squared"),
+    stars = F,
+    notes = list("This table presents results of univariate and multivarate 
+                 regression models.") 
+    ) 
+```
+
+???
 The preview mode for these tables is actually different from how it saves - so let's take a quick look at that.
 ---
 
@@ -701,10 +719,6 @@ layout: true
 ---
 
 [`fixest`](https://cran.r-project.org/web/packages/fixest/vignettes/fixest_walkthrough.html) is a package designed for fast implementation of fixed effects regression, but also comes with the added benefit of making standard errors easy to adjust (ie., for clustering or heteroskedasticity) and built-in functionality for estimating two-stage least squares models. While there are other packages that can help with standard errors or run 2SLS, having them all in one package makes things easier.
-
-.footnote[
-*Another good package that handles SE, fixed effects, and 2SLS well is [`estimatr`](https://declaredesign.org/r/estimatr/articles/getting-started.html). In contrast, commonly used (but more single purpose) packages that do some of these tasks are: `sandwich` for robust SE, `clubSandwich` for cluster-robust SE, and the `ivreg` pacakge for instrumental variables estimation. It's also possible to include fixed effects in a call to `lm()` in base R as long as the variable is a factor.
-]
 
 --
 
@@ -718,6 +732,9 @@ mvfeols <- feols(
 
 ```
 
+.footnote[
+*Another good package that handles SE, fixed effects, and 2SLS well is [`estimatr`](https://declaredesign.org/r/estimatr/articles/getting-started.html). In contrast, commonly used (but more single purpose) packages that do some of these tasks are: `sandwich` for robust SE, `clubSandwich` for cluster-robust SE, and the `ivreg` pacakge for instrumental variables estimation. It's also possible to include fixed effects in a call to `lm()` in base R as long as the variable is a factor.
+]
 
 ---
 
@@ -746,8 +763,7 @@ regCL <- feols(
     data = penguins)
 
 regFE <- feols( 
-    body_mass_g ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex |
-        year, #<<
+    body_mass_g ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex | year, #<<
     data = penguins)
 
 ```
@@ -755,7 +771,7 @@ regFE <- feols(
 explain the syntax of the highlighted rows
 ---
 
-```{r compare-models, echo=FALSE, highlight=TRUE}
+```{r compare-models, echo=FALSE}
 
 modelsummary(
     list(
@@ -773,13 +789,320 @@ modelsummary(
         "(Intercept)" = "Constant"),
     gof_map = c("r.squared", "vcov.type", "FE: year","nobs")
     ) 
+
 ```
 
 ???
 highlight how the coefficients are the same in cols 1:3, as expected but the SE are different, while both the coefs and SE are different in the model with FE. Model summary can report the standard errors & presence of FE (but only for fixest object because that information is stored in R). Note that the default in fixest is to cluster the SE and the same level of the fixed effects (column 4). This output is all customizable.
 ---
+layout: true
+# Non-linear regression models
+---
+
+So far we've seen `lm()` and `feols()`, which both estimate linear OLS models. If you want to estimate a logistic or probit regression, you need the parallel commands: `glm()` and `feglm()`. Here are some examples of the base R and `fixest` options. In these examples, we'll first create a binary variable for `large_penguin` that = 1 if `body_mass_g > 4050` and 0 otherwise.
+
+```{r binary-bmi, echo=FALSE}
+
+penguins <- penguins %>%
+    mutate(
+        large_penguin = case_when(
+            body_mass_g > 4050 ~ 1, 
+            body_mass_g <= 4050 ~ 0
+        )
+        
+    )
+    
+
+```
+
+
+### Base R
+```{r base-nonlinear}
+logit_mod <- glm(
+    large_penguin ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex,
+    family = "binomial", #<<
+    data = penguins)
+
+probit_mod <- glm(
+    large_penguin ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex,
+    family = binomial(link = "probit"), #<<
+    data = penguins)
+
+```
+???
+4050 is the median body mass of all penguins in the data
+---
+
+
+### `fixest`
+Unless you are adding fixest effects or adjusting the standard errors, the code will be the same as the base R version -- but you have to specify the `fixest` version of the regression command: `feglm()`
+
+```{r fixest-nonlinear}
+logit_mod <- feglm(#<<
+    large_penguin ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex,
+    family = "binomial", 
+    data = penguins)
+
+probit_mod <- feglm( #<<
+    large_penguin ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex,
+    family = binomial(link = "probit"), 
+    data = penguins)
+
+
+```
+---
+
+You may recall that the coefficients from logit and probit models are not directly interpretable. Regression coefficients from logistic regression are typically expressed as odds ratios, while marginal effects are most often calculated after a probit regression.
+
+--
+
+There are a few tools you can use to convert these coefficients into the standard odds ratios or marginal effects. First, `broom::tidy()`, which has an option to exponentiate coefficients (e.g., convert them to odds ratios) when tidying regression results. 
+
+```{r tidy-exp}
+tidy(logit_mod, exponentiate = T)
+
+```
+---
+
+To calculate marginal effects, you can use the package [`marginaleffects`](https://vincentarelbundock.github.io/marginaleffects/index.html) (remember to install it first!). 
+
+```{r mfx}
+#install.package("marginaleffects")
+library(marginaleffects)
+mfx <- marginaleffects(probit_mod)
+
+tidy(mfx)
+
+```
+
+---
+
+Suppose you wanted to combine a linear, logit, and probit model in a single table to compare the results?
+
+```{r lpm, echo = FALSE}
+lpm_mod <- feols(large_penguin ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex,
+    data = penguins)
+
+```
+
+```{r compare-binary, eval=FALSE}
+
+modelsummary(
+    list(
+        "Linear" = lpm_mod,
+        "Logit" = logit_mod,
+        "Probit" = mfx),
+    statistic = "conf.int", 
+    fmt = 2,
+    exponentiate = c(FALSE, TRUE, FALSE),
+    coef_map= c(
+        "flipper_length_mm" = "Flipper Length (mm)", 
+        "bill_length_mm" = "Bill Length (mm)",
+        "bill_depth_mm" = "Bill Depth (mm)",
+        "sexmale" = "Male", 
+        "sex" = "Male"),
+    stars = T,
+    gof_map = c("nobs"),
+    notes = list(
+        "95% confidencen intervals in brackets.") 
+)
+
+```
+---
+
+```{r compare-binary2, echo=FALSE}
+
+modelsummary(
+    list(
+        "Linear" = lpm_mod,
+        "Logit" = logit_mod,
+        "Probit" = mfx),
+    statistic = "conf.int", 
+    fmt = 2,
+    exponentiate = c(FALSE, TRUE, FALSE),
+    coef_map= c(
+        "flipper_length_mm" = "Flipper Length (mm)", 
+        "bill_length_mm" = "Bill Length (mm)",
+        "bill_depth_mm" = "Bill Depth (mm)",
+        "sexmale" = "Male", 
+        "sex" = "Male"),
+    stars = T,
+    gof_map = c("nobs"),
+    notes = list(
+        "95% confidencen intervals in brackets.") 
+)
+
+```
+---
+layout: false
+# Resources for regression analysis in R
+
+Here is a list of resources that will be helpful as you get started with regression in R:
+
+* [Econometrics with R](https://www.econometrics-with-r.org/): tracks the Stock & Watson econometrics textbook)
+
+* [Introduction to Regression in R](https://stats.oarc.ucla.edu/r/seminars/introduction-to-regression-in-r/): a series of guides from UCLA
+
+* [Modeling Data in the Tidyverse](https://jhudatascience.org/tidyversecourse/model.html): the "tidyverse" approach to inference (a little more data science and a little less econometrics)
+
+---
 layout: false
 class: middle, center, inverse
 # Questions?
 ---
+
+# Data Visuzaltion `r emo::ji("sparkles")`
+
+Data visualization is a critical part of any data project. Once data have been imported and wrangled into place, visualizing your data can help you get a handle on what’s going on in the dataset. And, once you’ve completed your analysis and are ready to present your findings, data visualizations are a highly effective way to communicate your results to others. 
+
+--
+
+In this workshop, I will introduce the powerful [`ggplot2`](https://ggplot2.tidyverse.org/) R package. But before we jump into `ggplot2`, we'll review a few principles and best practices of data visualization.
+
+--
+
+## Features of Good Plots
+1. Clearly-labeled axes.
+2. Legible text.
+3. Axes that are not misleading.
+4. Colors that work for the context and communication objective
+5. The right kind of plot, given the data and communication objective.
+
+.footnote[
+*Extra thanks to the [JHU Data Science](https://jhudatascience.org/tidyversecourse/dataviz.html) course for the content in this section.
+]
+
+???
+Be mindful of color blindness and how people are likely going to be viewing your figures.
+---
+
+# Plot Types `r emo::ji("bar_chart")`
+
+The goal of data visualization in data analysis is to improve understanding of the data. Thinking about the best way to visualize your data before making the plot is an important step in the process of data visualization. 
+
+--
+
+Not every plot is good for every goal. For example, if your goal is to allow the viewer to compare values across groups, pie charts should largely be avoided. This is because it’s easier for the human eye to differentiate between bar heights than it is between similarly-sized slices of a pie.
+
+--
+
+We'll see how to generate each of these plot types in `ggplot2`:
+
+* scatterplots
+* histograms & density plots
+* barplots
+* boxplots
+* lineplots 
+* maps! `r emo::ji("world")`
+
+???
+I will first demonstrate how to create a basic version of each of these plot types and then we'll spend a good amount of time customizing and improving a basic plot - we'll take a "story telling" approach that you see a lot in data journalism
+---
+layout:true
+# `ggplot2` basics  <img src="./figs/ggplot.png" alt="gg" width="70"/>
+---
+
+`ggplot2` is a system for declaratively creating graphics, based on [The Grammar of Graphics](https://www.amazon.com/Grammar-Graphics-Statistics-Computing/dp/0387245448/ref=as_li_ss_tl). You provide the data, tell `ggplot2` how to map variables to aesthetics, what graphical primitives to use, and it takes care of the details. Here is a useful `ggplot2` [cheat sheet](https://github.com/rstudio/cheatsheets/blob/main/data-visualization-2.1.pdf).
+
+--
+
+To start building plots in `ggplot2`, we’ll need some data and we’ll need to know the type of plot we want to make. The type of plot you want to make in `ggplot2` is referred to as a geom. `ggplot2` is layered - layers of information add on top of each other as you build your graph.  In code written to generate a ggplot2 figure, you will see each line is separated by a plus sign `(+)`. Think of each line as a different layer of the graph.
+
+--
+
+To get started, we’ll start with the two basics (data and a geom) and build additional layers from there. All plots will start with the following general form:
+
+.pull-left[
+```{r gg-intro, eval=FALSE}
+
+ggplot(data = DATASET) +
+    geom_PLOT_TYPE(mapping = aes(VARIABLES))
+
+```
+
+]
+
+--
+
+.pull-right[
+Or if you're piping:
+```{r gg-intro2, eval=FALSE}
+
+DATASET %>%
+    ggplot() +
+    geom_PLOT_TYPE(mapping = aes(VARIABLES))
+
+```
+
+]
+
+???
+you will always begin by calling the ggplot() function and then specifying your dataset or specify your dataset and then pipe the ggplot call. then you have to specify what geom type you’re interested in plotting. (geom, short for geometry, refers to the plot type
+---
+
+### Scatterplots
+
+Scatterplots are often one of the first exploratory plots people make. They are useful when you’re looking at the relationship between two numeric variables.
+
+--
+
+The "geom" for a scatterplot is: `geom_point`. Within `geom` you will specify the arguments needed to tell `ggplot2` how you want your scatterplot to look. 
+
+--
+
+Then, you will map your variables with the **aesthetic** argument: `aes`. We specify these by defining `x` and `y` within the `aes()` argument. The x argument defines which variable will be along the bottom of the plot (x-axis). The y refers to which variable will be along the left side of the plot (y-axis).
+
+--
+
+We'll use the penguins dataset to demonstrate these.
+
+---
+
+.pull-left[
+```{r scatterplot, fig.show='hide'}
+penguins %>%
+    ggplot() +
+    geom_point(
+        aes(x = flipper_length_mm,
+            y = body_mass_g)) 
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'scatterplot', echo = FALSE,  fig.width = 5, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+???
+without specifying much at all, we have a pretty nice looking plot
+---
+
+In the scatterplot we just generated, we saw that there was a (positive) relationship between flipper length and penguin size. There are three penguin species in this dataset: Adelie, Gentoo, and Chinstrap. You might wonder how the relationship between flipper length and penguin size varies by species. To see this, let's change the color of our points to differ based on the species by adding another argument to the `aes()`.
+
+--
+.pull-left[
+```{r scatterplot-color, fig.show='hide'}
+penguins %>%
+    ggplot() +
+    geom_point(
+        aes(x = flipper_length_mm,
+            y = body_mass_g,
+            color = species)) #<<
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'scatterplot-color', echo = FALSE,  fig.width = 5, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+???
+Because species is a factor variable, ggplot knows there are different categories of penguins, picks 3 default colors, and generates a legend -- all without specifying anything additional!
+
+
+
 
