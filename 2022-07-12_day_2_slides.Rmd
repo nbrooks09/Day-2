@@ -990,8 +990,8 @@ We'll see how to generate each of these plot types in `ggplot2`:
 
 * scatterplots
 * histograms & density plots
-* barplots
 * boxplots
+* barplots
 * lineplots 
 * maps! `r emo::ji("world")`
 
@@ -1101,8 +1101,164 @@ penguins %>%
 ```
 ]
 ???
-Because species is a factor variable, ggplot knows there are different categories of penguins, picks 3 default colors, and generates a legend -- all without specifying anything additional!
+Because species is a factor variable, ggplot knows there are different categories of penguins, picks 3 default colors, and generates a legend -- all without specifying anything additional! And look at how adding the color has made a species-specific pattern very apparent
 
+---
+
+To demonstrate how you can continue to layer different components onto a plot, suppose we wanted to see how the bill length of a penguin is related to penguin size, flipper length, AND species? Just like we colored the points by species (a factor variable), we can change the size of points according to a continuous variable.
+
+--
+
+.pull-left[
+```{r scatterplot-size, fig.show='hide'}
+penguins %>%
+    ggplot() +
+    geom_point(
+        aes(x = flipper_length_mm,
+            y = body_mass_g,
+            color = species,
+            size = bill_length_mm)) #<<
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'scatterplot-size', echo = FALSE,  fig.width = 7.5, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+
+---
+
+### Histograms & Density Plots
+
+Histograms and density plots are useful plots for looking at the distribution of a single numeric variable. The **geom** for a histogram is `geom_histogram()` and for a density plot is `geom_density()`.
+
+--
+
+.pull-left[
+```{r hist, fig.show='hide'}
+penguins %>%
+    ggplot() +
+    geom_histogram( #<<
+        aes(x = flipper_length_mm)) 
+
+
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'hist', echo = FALSE,  fig.width = 5, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+???
+This demonstrates a bimodal distribution -- given the scatterplot we already saw, we might think there are differences by species.
+---
+
+Just like scatterplots, we can look at differences between groups on a histogram (or density plot) as well. Let's color the histogram by species. When we're dealing certain geometries, like histograms, the **color** aesthetic refers to the outline or border, and if you want to *fill* the bars, you need to use the **fill** aesthetic.
+
+--
+.pull-left[
+```{r hist-color, fig.show='hide'}
+penguins %>%
+    ggplot() +
+    geom_histogram( 
+        aes(x = flipper_length_mm,
+            fill = species)) #<<
+
+
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'hist-color', echo = FALSE,  fig.width = 5, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+---
+
+### Boxplots
+Boxplots are a great way to visualize distributions of numeric variables because they provide a lot if information in a concise way. Boxplots present the median of the distribution in the middle of the box, the upper and lower quartiles on the edges, and extreme lines to show outliers.  The "geom" for a boxplot is.... `geom_boxplot()`.
+
+--
+.pull-left[
+```{r boxplot, fig.show='hide'}
+penguins %>%
+    ggplot() +
+    geom_boxplot( 
+        aes(y = flipper_length_mm)) #<<
+
+
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'boxplot', echo = FALSE,  fig.width = 5, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+???
+Here i specified y = flipper length - that's because i wanted to show the boxplot vertically. if you had specified x instead, this figure would be horizontal. 
+
+What's the median flipper length? what are the upper and lower quartiles?
+---
+
+Boxplots can also be good ways to compare the distributions of numeric variables by groups. You have to specify a numeric variable for the Y-axis, and a qualitative variable for the X-axis (a group). (Or the reverse if you wanted to show a horizontal boxplot).
+
+.pull-left[
+```{r boxplot-sex, fig.show='hide'}
+penguins %>%
+    ggplot() +
+    geom_boxplot( 
+        aes(x = sex,#<<
+            y = flipper_length_mm)) 
+
+
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'boxplot-sex', echo = FALSE,  fig.width = 5, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+???
+Ooh that's no good - we have some penguins who we're missing data on the sex. Let's add another layer to see the underlying data points for each of these groups. This can help us see how many NA values we have, but can also be a good idea generally with boxplots which can sometimes conceal the shape of the distribution.
+---
+
+Here we are adding a new geometry (`geom_jitter()` - it's like `geom_point()` but spreads the points around over each group) simply by connecting it with a `+`. Every geometry needs to have the aesthetics specified. But if they are all the same (e.g., the same `x`, `y` `color` or `fill` ), then it can be more efficient to specify them in the initial call to `ggplot2()`.
+
+
+.pull-left[
+```{r boxplot-sex-jitter, fig.show='hide'}
+penguins %>%
+    ggplot(
+        aes(x = sex, 
+            y = flipper_length_mm, 
+            fill = sex)) + 
+    geom_boxplot() +
+    geom_jitter() #<<
+
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'boxplot-sex-jitter', echo = FALSE,  fig.width = 6, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
 
 
 
