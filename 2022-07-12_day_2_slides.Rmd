@@ -34,17 +34,15 @@ library(readxl) # this package allows you to read .xlsx files into R
 library(haven) # this package allows you to read & write stata .dta files
 library(tabulator) # this is a package that is useful for making cross-tabs
 library(janitor) # contains useful commands for data cleaning
-library(tidycensus) # an R package that allows users to interface with a select
-                    # number of the US Census Bureau’s data APIs and return 
-                    # tidyverse-ready data frame
 library(palmerpenguins)
-library(gapminder) # contains an excerpt of data from Gapminder (https://www.gapminder.org/data/)
+library(hrbrthemes) # rovides typography-centric themes and theme components for ggplot2
 library(rvest) # a tidyverse package for webscraping
 library(glue) # tidyverse-adjacent package makes working with interpreted string literals simpler
 library(lubridate) # tidyverse package for working with dates
 library(fixest)
 library(infer)
 library(broom)
+library(patchwork) # for combining plots
 library(modelsummary)
 library(gtsummary) # for summary tables
 library(tidyverse) # this loads the 8 core packages of the tidyverse
@@ -553,7 +551,6 @@ Notice that I am storing the regression in a new object I called `reg`:
 reg <- lm( #<<
     body_mass_g ~ flipper_length_mm, 
     data = penguins) 
-summary(reg)
 
 ```
 
@@ -993,7 +990,6 @@ We'll see how to generate each of these plot types in `ggplot2`:
 * boxplots
 * barplots
 * lineplots 
-* maps! `r emo::ji("world")`
 
 ???
 I will first demonstrate how to create a basic version of each of these plot types and then we'll spend a good amount of time customizing and improving a basic plot - we'll take a "story telling" approach that you see a lot in data journalism
@@ -1259,6 +1255,483 @@ penguins %>%
 ```{r ref.label = 'boxplot-sex-jitter', echo = FALSE,  fig.width = 6, fig.asp=0.618, out.width = "100%", fig.align = "center"}
 ```
 ]
+???
+What can you learn from this plot now that we added the points?
+---
+
+### Barplots
+Barplots are one of the most commonly used plot types. A barplot shows the relationship between a numeric and a categorical variable. Each entity of the categorical variable is represented as a bar. The size of the bar represents its numeric value. Barplots can also be useful for comparing values across groups. 
+
+--
+
+The "geom" for a barplot is `geom_bar()`. By default, `geom_bar()` is designed to make it easy to create barplots that show counts of data by category, so if you want to show something else, you'll need to do a little work. Let's look at a basic barplot with the `penguins` data.
+
+--
+
+.pull-left[
+```{r barplot, fig.show='hide'}
+penguins %>%
+    ggplot(aes(x = species)) +
+        geom_bar()
+
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'barplot', echo = FALSE,  fig.width = 4, fig.asp=0.618, out.width = "70%", fig.align = "center"}
+```
+]
+---
+
+### Line plots
+Line plots are good for showing trends over time. Let's return to the WDI data that we filtered to include only countries in South Asia.
+
+--
+
+
+.pull-left[
+```{r lineplot, fig.show='hide'}
+sa %>%
+    ggplot(aes(
+        x = year, 
+        y = gdppc, 
+        color = country)) +
+    geom_line()#<<
+
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'lineplot', echo = FALSE,  fig.width = 4, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+
+???
+Notice that you can specify the aesthetics either in the call to ggplot or in the geom. We'll take a minute to talk about handling times & dates in R in a minute, but first, see how the maldives are making it hard to see trends in the other countries because the GDP is so much higher? let's remove that
+---
+
+You can pipe multiple operations together -- for example, here we filtered the data, then called `ggplot2`. But you could `group_by()` and calculate summary statistics and then plot those -- which is very common!
+
+.pull-left[
+```{r lineplot-maldives, fig.show='hide'}
+sa %>%
+    filter(country != "Maldives") %>%
+    ggplot(aes(
+        x = year, 
+        y = gdppc, 
+        color = country)) +
+    geom_line()#<<
+
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'lineplot-maldives', echo = FALSE,  fig.width = 4, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+
+---
+layout: true
+# Dates & Times in R <img src="./figs/lubridate.png" alt="dates" width="70"/>
+---
+
+[`lubridate`](https://lubridate.tidyverse.org/articles/lubridate.html) is an R package that makes it easier to work with dates and times. The `lubridate` package is not part of the core tidyverse packages, so it will have to be loaded individually. Date information is often provided as a string.  To generate date objects, you can call a function using `y`, `m`, and `d` in the order in which the year (y), month (m), and date (d) appear in your data. Let's look at a few examples:
+
+--
+
+```{r ymd}
+# year-month-date
+ymd("1988-09-29")
+
+# month-day-year
+mdy("September 29th, 1988")
+
+# day-month-year
+dmy("29-Sep-1988")
+
+```
+???
+The code produces identical output for the date September 29th, 1988, despite the three distinct input formats. 
+---
+
+You could have a dataset where month, date, year, and/or time information are included in separate columns. For example:
+
+
+```{r flightdata, echo=FALSE}
+library(nycflights13)
+df <- flights %>%
+    select(year, month, day) %>%
+    group_by(year, month, day) %>%
+    slice(1) %>%
+    ungroup()
+
+```
+
+```{r glimpse-date}
+
+glimpse(df)
+```
+
+---
+
+You can use the `make_date()` function within `lubridate` to take this separate information and create a date object.
+
+```{r ind-parts}
+
+df %>%
+    mutate(
+        date = make_date(year, month, day)
+    ) %>%
+    head(5)
+
+```
+???
+note that everything we've seen with dates can be applied to date-time objects too
+---
+
+You can also extract information from date/date-time object with the functions: `year()`, `month()`, `mday()`, `wday()`, `hour()`, `minute()` and `second()`.
+
+.pull-left[
+```{r date-component, eval=FALSE}
+
+mydate <- today()
+mydate
+
+## extract year information
+year(mydate)
+
+## extract day of the month
+mday(mydate)
+
+## extract weekday information
+wday(mydate)
+
+## label with actual day of the week
+wday(mydate, label = TRUE)
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'date-component', echo = FALSE }
+```
+]
+
+
+.footnote[
+*Special thanks to the [JHU Data Science ](https://jhudatascience.org/tidyversecourse/wrangle-data.html#working-with-dates-and-times) course for this content.
+]
+
+???
+notice the difference between the two weekday options? the one with the labels is generated as a factor with the correct order (sunday < monday), which is really useful! 
+---
+
+`ggplot2` makes it easy to adjust scales when you're plotting dates/times. Let's see how that works with the weather_df.csv file we imported yesterday.
+
+```{r weather-df}
+weather_df <- read_csv("data/weather_data.csv")
+glimpse(weather_df)
+
+```
+
+???
+notice that the day variable is stored as a character - we need to convert it to a date object
+---
+
+.pull-left[
+```{r date-plot, fig.show='hide'}
+
+weather_df %>%
+    mutate(
+        day = mdy(day),
+        temp_F = 9/5*(temp - 273) + 32 
+    ) %>%
+    ggplot(aes(x = day, y = temp_F)) +
+        geom_line()
+
+```
+]
+
+--
+
+.pull-right[
+```{r ref.label = 'date-plot', echo = FALSE,  fig.width = 4, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+---
+
+But if the date/time variable is recognized as a date class, you can use the `scale_x_date()` function within `ggplot2` to choose the format displayed. Here are some examples of date formats:
+
+--
+
+```{r, out.width = "600px", fig.align='center', echo=FALSE}
+knitr::include_graphics("figs/time_format.png")
+```
+--
+
+/
+And, you can use the option within `scale_x_date()` to specify the "breaks" -- ie., whether you want tick marks for every day, week, 2 weeks, etc.
+---
+
+.pull-left[
+```{r date-plot2, fig.show='hide'}
+
+weather_df %>%
+    mutate(
+        day = mdy(day),
+        temp_F = 9/5*(temp - 273) + 32 
+    ) %>%
+    ggplot(aes(x = day, y = temp_F)) +
+        geom_line() +
+        scale_x_date(
+            date_labels = "%Y %b %d",
+            date_breaks = "5 weeks")
+
+```
+]
+
+.pull-right[
+```{r ref.label = 'date-plot2', echo = FALSE,  fig.width = 7, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+---
+
+.pull-left[
+```{r date-plot3, fig.show='hide'}
+
+weather_df %>%
+    mutate(
+        day = mdy(day),
+        temp_F = 9/5*(temp - 273) + 32 
+    ) %>%
+    ggplot(aes(x = day, y = temp_F)) +
+        geom_line() +
+        scale_x_date(
+            date_labels = "%b %Y",
+            date_breaks = "2 weeks") +
+        theme(
+            axis.text.x = element_text(
+                angle = 25
+                )
+        )
+
+```
+]
+
+.pull-right[
+```{r ref.label = 'date-plot3', echo = FALSE,  fig.width = 7, fig.asp=0.618, out.width = "100%", fig.align = "center"}
+```
+]
+---
+
+One final, non-date aspect to demonstrate is "faceting". You may have noticed the odd break in the data between April and May That's because there is missing data there -- and `ggplot2` is trying to connect the time periods. For this data, it would be more appropriate to make two separate plots, which we can do with the `facet_wrap()` option.
+
+
+```{r date-plot4, fig.show='hide'}
+
+weather_df %>%
+    mutate(
+        day = mdy(day),
+        temp_F = 9/5*(temp - 273) + 32 
+    ) %>%
+    ggplot(aes(x = day, y = temp_F)) +
+        geom_line() +
+        scale_x_date(
+            date_labels = "%b %Y",
+            date_breaks = "3 weeks") +
+        facet_wrap(~season, scales = "free_x") + #<<
+        theme(
+            axis.text.x = element_text(angle = 15)
+        )
+
+```
+
+---
+
+
+```{r ref.label = 'date-plot4', echo = FALSE,  fig.width = 7, fig.asp=0.618, out.width = "70%", fig.align = "center"}
+```
+
+
+---
+layout: true
+# `ggplot2` customization
+---
+
+So far we have created pretty good looking plots with very little work. But if you're making a figure for a presentation or report, you'll want to adjust a few more things to make your plots look nice. Here are a few key aspects you'll typically adjust:
+
+
+- **scales**: customize axes, legends for color, shape, and fill variables
+
+--
+
+- **colors**: you can load pre-determined color palettes or manually change colors 
+
+--
+
+- **labs**: how we label everything (title, subtitle, legend title)
+
+--
+
+- **theme**: where you adjust fonts, margins, grid lines; there are also many pre-set themes you can load that will automatically change all of these things for you (check out the themes you can install with [`hrbrthemes`](https://github.com/hrbrmstr/hrbrthemes))
+
+???
+We already saw a little bit of this with the last plots - where I used date scales and the theme option to customize things.
+---
+
+```{r ggadvanced, fig.show='hide',}
+penguins %>%
+    ggplot(aes(x = bill_length_mm,
+               y = bill_depth_mm,
+               group = species)) +
+    geom_point(aes(color = species, 
+                 shape = species),
+             size = 3,
+             alpha = 0.8) +
+    geom_smooth(method = "lm", se = FALSE, aes(color = species)) +
+    scale_color_manual(values = c("darkorange","purple","cyan4")) +
+    labs(
+        title = "Penguin bill dimensions",
+        subtitle = "Bill length and depth for Penguins at Palmer Station LTER",
+        x = "Bill length (mm)",
+        y = "Bill depth (mm)",
+        color = "Penguin species",
+        shape = "Penguin species") +
+    theme_ipsum()  #included in the hrbrthemes package
+  
+```
+???
+talk through the syntax of each line
+
+---
+
+```{r ref.label = 'ggadvanced', echo = FALSE,  fig.width = 9, fig.asp=0.618, out.width = "75%", fig.align = "center"}
+```
+---
+
+```{r wdi-bar, echo = FALSE,  fig.width = 11, fig.asp=0.518, out.width = "90%", fig.align = "center"}
+
+top_10 <- wdi_df %>%
+    filter(year == max(year)-1) %>%
+    filter(!is.na(gdppc)) %>%
+    arrange(gdppc) %>%
+    tail(10) %>%
+    mutate(country = factor(country),
+           country = fct_reorder(country, gdppc)) %>%
+    ggplot(
+        aes(x = country, 
+            y = gdppc)) + 
+    scale_y_continuous(labels = scales::label_dollar()) +
+    geom_bar(stat = "identity", 
+             color = "darkorange",
+             fill = "darkorange") +
+    labs(
+        x = NULL,
+        y = "GDP per capita (constant 2015 US$)",
+        title = "Highest GDP per capita in the world",
+        subtitle = "10 Richest Countries in 2020"
+    ) +
+    coord_flip() +
+    theme_ipsum()
+   
+
+bottom_10 <- wdi_df %>%
+    filter(year == max(year)-1) %>%
+    filter(!is.na(gdppc)) %>%
+    arrange(gdppc) %>%
+    head(10) %>%
+    mutate(country = factor(country),
+           country = fct_reorder(country, -gdppc)) %>%
+    ggplot(
+        aes(x = country, 
+            y = gdppc)) + 
+    scale_y_continuous(labels = scales::label_dollar()) +
+    geom_bar(stat = "identity") + 
+    geom_bar(stat = "identity", 
+             color = "purple",
+             fill = "purple") +
+    labs(
+        x = NULL,
+        y = "GDP per capita (constant 2015 US$)",
+        title = "Lowest GDP per capita in the world",
+        subtitle = "10 Poorest Countries in 2020"
+    ) +
+    coord_flip() +
+    theme_ipsum()
+
+top_10 + bottom_10
+
+```
+???
+we'll demo how to create this one too
+---
+
+layout: false
+# `ggplot2` Resources
+
+* [`ggplot2` documentation](https://ggplot2.tidyverse.org/) 
+
+* [from Data to Viz](https://www.data-to-viz.com/)
+
+* [STHDA guides](http://www.sthda.com/english/wiki/ggplot2-essentials)
+
+* [The R Graph Gallery](https://r-graph-gallery.com/)
+
+* [Telling Stories With Data](https://tellingstorieswithdata.com/06-static_communication.html)
+
+* [Data Viz with R](https://rkabacoff.github.io/datavis/preface.html)
+
+* [StackOverflow](https://stackoverflow.com/questions/tagged/ggplot2)
+
+---
+class: middle, center, inverse
+# Questions?
+---
+
+class: middle, center, inverse
+# Let's see it in R
+---
+
+# Wrap-up
+
+Today we covered:
+
+- making publication-ready tables of descriptive statistics
+- regressions and how to export results
+- data visualization with `ggplot2`
+
+
+--
+
+There is a companion R script that has all the commands I used today, and a short "assignment" that tests the skills covered in today's workshop. 
+
+---
+class: middle, center, inverse
+# THANK YOU!
+
+[nina.brooks@uconn.edu](nina.brooks@uconn.edu)
+
+
+[www.ninarbrooks.com](www.ninarbrooks.com)
+
+
+
+
+
+
+
+
+
 
 
 
