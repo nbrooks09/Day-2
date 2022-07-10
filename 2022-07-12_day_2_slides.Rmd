@@ -676,7 +676,7 @@ modelsummary(
     stars = F,
     notes = list("This table presents results of univariate and multivarate 
                  regression models."),
-    output = "table1.png" # can change to other formats
+    output = "./output/table1.png" # can change to other formats
     ) 
 
 ```
@@ -889,7 +889,6 @@ modelsummary(
         "Linear" = lpm_mod,
         "Logit" = logit_mod,
         "Probit" = mfx),
-    statistic = "conf.int", 
     fmt = 2,
     exponentiate = c(FALSE, TRUE, FALSE),
     coef_map= c(
@@ -901,7 +900,7 @@ modelsummary(
     stars = T,
     gof_map = c("nobs"),
     notes = list(
-        "95% confidencen intervals in brackets.") 
+        "95% confidence intervals in brackets.") 
 )
 
 ```
@@ -914,7 +913,6 @@ modelsummary(
         "Linear" = lpm_mod,
         "Logit" = logit_mod,
         "Probit" = mfx),
-    statistic = "conf.int", 
     fmt = 2,
     exponentiate = c(FALSE, TRUE, FALSE),
     coef_map= c(
@@ -1367,17 +1365,16 @@ You could have a dataset where month, date, year, and/or time information are in
 
 
 ```{r flightdata, echo=FALSE}
-library(nycflights13)
-df <- flights %>%
-    select(year, month, day) %>%
-    group_by(year, month, day) %>%
-    slice(1) %>%
-    ungroup()
-
+df <- tribble(
+    ~year, ~ month, ~day,
+   2005, 1, 27,
+   2014, 3, 5,
+   2019, 8, 16,
+   2020, 10, 11
+)
 ```
 
 ```{r glimpse-date}
-
 glimpse(df)
 ```
 
@@ -1390,8 +1387,7 @@ You can use the `make_date()` function within `lubridate` to take this separate 
 df %>%
     mutate(
         date = make_date(year, month, day)
-    ) %>%
-    head(5)
+    ) 
 
 ```
 ???
@@ -1517,7 +1513,7 @@ weather_df %>%
     ggplot(aes(x = day, y = temp_F)) +
         geom_line() +
         scale_x_date(
-            date_labels = "%b %Y",
+            date_labels = "%b %y",
             date_breaks = "2 weeks") +
         theme(
             axis.text.x = element_text(
@@ -1621,7 +1617,7 @@ talk through the syntax of each line
 
 ```{r wdi-bar, echo = FALSE,  fig.width = 11, fig.asp=0.518, out.width = "90%", fig.align = "center"}
 
-top_10 <- wdi_df %>%
+top10 <- wdi_df %>%
     filter(year == max(year)-1) %>%
     filter(!is.na(gdppc)) %>%
     arrange(gdppc) %>%
@@ -1645,7 +1641,7 @@ top_10 <- wdi_df %>%
     theme_ipsum()
    
 
-bottom_10 <- wdi_df %>%
+bottom10 <- wdi_df %>%
     filter(year == max(year)-1) %>%
     filter(!is.na(gdppc)) %>%
     arrange(gdppc) %>%
@@ -1669,14 +1665,31 @@ bottom_10 <- wdi_df %>%
     coord_flip() +
     theme_ipsum()
 
-top_10 + bottom_10
+top10 + bottom10
 
 ```
 ???
 we'll demo how to create this one too
 ---
-
 layout: false
+# Exporting plots
+
+To export your plots, you can use the command `ggsave()`. If you do not save your plot as an object, `ggsave()` will automatically save whatever plot is currently in your plot viewer (which can lead to mistakes if you're testing out a lot of plots). If you have saved your plot as an object, then you need to specify the object in your call to `ggsave()`.
+
+```{r ggsave, eval = F}
+top10 + bottom10 # print the plot first, so it's in the plot viewer
+ggsave(filename = "./output/gdp.png") # can specify other filetypes
+
+ggsave(plot = top10, # specifies the plot stored as "top10" in the environment
+       filename = "./output/gdp_top10.png")
+
+ggsave(plot = bottom10,  # specifies the plot stored as "bottom10" in the environment
+       filename = "./output/gdp_bottom10.png")
+
+
+```
+
+---
 # `ggplot2` Resources
 
 * [`ggplot2` documentation](https://ggplot2.tidyverse.org/) 
