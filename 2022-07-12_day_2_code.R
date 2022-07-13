@@ -28,7 +28,6 @@ library(tidyverse) # this loads the 8 core packages of the tidyverse
 library(tidylog) # adds extra explanation of tidyverse commands
 
 
-
 ################################################################################
 # Load the WDI data for demo purposes
 ################################################################################
@@ -196,7 +195,8 @@ tbl %>%
 
 tbl %>%
     as_flex_table() %>% # need to convert to a "flex_table" object first
-    flextable::save_as_docx(path = "./output/trial_characteristics.docx")
+    flextable::save_as_docx(
+        path = "./output/trial_characteristics.docx")
 
 # need help? these 2 commands are equivalent
 ?tbl_summary()
@@ -781,16 +781,18 @@ sa %>%
 p1 <- penguins %>%
     ggplot(aes(x = bill_length_mm,
                y = bill_depth_mm,
+               color = species, 
+               shape = species,
                group = species)) +
-    geom_point(aes(color = species, 
-                   shape = species),
-               size = 3,
+    geom_point(size = 3,
                alpha = 0.8)
 
 p1
 
 # add a line of best fit - by species 
-p2 <- p1 + geom_smooth(method = "lm", se = FALSE, aes(color = species))
+p2 <- p1 + geom_smooth(method = "lm", 
+                       se = FALSE, 
+                       aes(color = species))
 p2
 
 # change the colors
@@ -813,7 +815,7 @@ p5 <- p4 + theme_ipsum()
 p5
 
 # look at the evolution (by combining the plots with patchwork)
-p1  + p2 + p3 + p4 + p5 +
+p1 + p2 + p3 + p4 + p5 +
     plot_annotation(tag_levels = "1")
 
 ## putting it all together in a single call to ggplot

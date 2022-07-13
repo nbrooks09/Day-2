@@ -557,7 +557,8 @@ reg <- lm( #<<
 ---
 
 
-```{r lm-summary-results, ref.label="lm-summary", echo=FALSE}
+```{r lm-summary-results, echo=FALSE}
+summary(reg)
 ```
 
 ???
@@ -854,6 +855,13 @@ You may recall that the coefficients from logit and probit models are not direct
 --
 
 There are a few tools you can use to convert these coefficients into the standard odds ratios or marginal effects. First, `broom::tidy()`, which has an option to exponentiate coefficients (e.g., convert them to odds ratios) when tidying regression results. 
+```{r re-run-logit, echo = F}
+logit_mod <- glm(
+    large_penguin ~ flipper_length_mm + bill_length_mm + bill_depth_mm + sex,
+    family = "binomial",
+    data = penguins)
+
+```
 
 ```{r tidy-exp}
 tidy(logit_mod, exponentiate = T)
@@ -946,7 +954,7 @@ class: middle, center, inverse
 # Questions?
 ---
 
-# Data Visuzaltion `r emo::ji("sparkles")`
+# Data Visualization `r emo::ji("sparkles")`
 
 Data visualization is a critical part of any data project. Once data have been imported and wrangled into place, visualizing your data can help you get a handle on what’s going on in the dataset. And, once you’ve completed your analysis and are ready to present your findings, data visualizations are a highly effective way to communicate your results to others. 
 
@@ -1726,7 +1734,7 @@ Today we covered:
 
 --
 
-There is a companion R script that has all the commands I used today, and a short "assignment" that tests the skills covered in today's workshop. 
+There is a companion R script that has all the commands I used in today's workshop. 
 
 ---
 class: middle, center, inverse
